@@ -63,67 +63,56 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     video_path = f"{root}/chainingmic/dat/{expID}/{expID}.mp4"
     if not os.path.exists(video_path):
         video_path = f"{root}/chainingmic/dat.processed/{expID}/{expID}.mp4"
-    # freq_path = f"{res_path}/{expID}/cluster_freq"
-    # if not os.path.exists(freq_path):
-    #     os.mkdir(freq_path)
-    # densities_path = f"{res_path}/{expID}/cluster_dens"
-    # if not os.path.exists(densities_path):
-    #     os.mkdir(densities_path)
+    freq_path = f"{res_path}/{expID}/cluster_freq"
+    if not os.path.exists(freq_path):
+        os.mkdir(freq_path)
+    densities_path = f"{res_path}/{expID}/cluster_dens"
+    if not os.path.exists(densities_path):
+        os.mkdir(densities_path)
 
     # error_distance(f"{root}/chainingmic/deeplabcut/DeepCut_resnet50_flyposeNov26shuffle1_1030000-snapshot-1030000.h5")
-
     # cwt_data = cwt_pipeline(trackfixed_path, pose_path, cwt_path, option=option)
     # cwt_data = dd.io.load(cwt_path)
-
     # tsne_data = tsne_pipeline(cwt_data, tsne_path, prandom=0.5)
     # tsne_data = dd.io.load(tsne_path)
-
     # ws_data = watershed_pipeline(tsne_data, ws_path)
     # ws_data = dd.io.load(ws_path)
-
     # plot_watershed(tsne_data, ws_data)
-
     # all_labels_data = labeling_pipeline(tsne_data, ws_data, cwt_data, all_labels_path)
     # all_labels_data = dd.io.load(all_labels_path)
-
     # plot_labeling(ws_data, tsne_data, all_labels_data)
-
     # confmat_data = confusion_mat(confmat_path, tsne_data, all_labels_data)
-
     # transitions_pipeline(all_labels_data)
 
     # vr = VideoReader(video_path)
     # all_labels_data = dd.io.load(all_labels_path)
     # all_labels = all_labels_data['all_labels']
-    #
     # clusters, cluster_counts = np.unique(all_labels, return_counts=True)
     # sorted_clusters = clusters[np.argsort(-cluster_counts)]
-    #
     # get_multi_movie(vr, sorted_clusters[10], all_labels, pose_path, trackfixed_path, option=option)
 
-    if option == 'deeplabcut':
-        positions = deepLabCut_positions(pose_path)
-    else:
-        pose_data = dd.io.load(pose_path)
-        positions = pose_data['positions']
-
-    all_error_boxes_idxs, error_matrix = testing_poses(positions, epsilon=[0])
-    # error_boxes_idxs = all_error_boxes_idxs[0][1500:1750:10]
-    error_boxes_idxs = all_error_boxes_idxs[0][1400:1800:5]
-
-    vr = VideoReader(video_path)
-
-    nsamples = -1
-
-    boxes, cm, new_boxes_idx = reget_boxes(vr, error_boxes_idxs[:nsamples], trackfixed_path, pose_path, ifly=0,  option='leap')
-
-    print(new_boxes_idx.shape)
-
-    testing_priors(positions, error_matrix[..., 0], boxes, cm, new_boxes_idx)
-
-    # error_boxes_idxs = all_error_boxes_idxs[0]
+    # if option == 'deeplabcut':
+    #     positions = deepLabCut_positions(pose_path)
+    # else:
+    #     pose_data = dd.io.load(pose_path)
+    #     positions = pose_data['positions']
+    #
+    # all_error_boxes_idxs, error_matrix = testing_poses(positions, epsilon=[0])
+    # error_boxes_idxs = all_error_boxes_idxs[0][1400:1800:5]     # error_boxes_idxs = all_error_boxes_idxs[0][1500:1750:10]
+    #
     # vr = VideoReader(video_path)
-    # Jan_Script(vr, error_boxes_idxs, 1, trackfixed_path, pose_path, option='leap')
+    # nsamples = 10
+    # boxes, cm, new_boxes_idx = reget_boxes(vr, error_boxes_idxs[:nsamples], trackfixed_path, pose_path, ifly=1,  option='leap')
+    #
+    # print(boxes.shape)
+    # plt.figure()
+    # plt.title('data boxes')
+    # plt.imshow(boxes[5, :, :, 0], aspect='auto', cmap='gray')
+
+    # print(new_boxes_idx.shape)
+    # testing_priors(positions, error_matrix[..., 0], boxes, cm, new_boxes_idx)
+
+    training_dataset_priors()
 
     plt.show()
 
@@ -136,7 +125,8 @@ def load_fixed_tracks(trackfixed_path, pose_path, option: str = 'temp'):
     chbb = track_data['chambers_bounding_box'][:]
     box_centers = centers[:, 0, :, :]   # nframe, fly id, coordinates
     box_centers = box_centers + chbb[1][0][:]
-    nflies = box_centers.shape[1].astype(np.int)
+    nflies = np.zeros(1, dtype=np.int)
+    nflies = box_centers.shape[1]
 
     heads = tracks[:, 0, :, 0, ::-1]   # nframe, fly id, coordinates
     tails = tracks[:, 0, :, 1, ::-1]   # nframe, fly id, coordinates
@@ -788,7 +778,7 @@ def testing_poses(positions, epsilon=[0, 2, 5], plotit: bool = False, detailed: 
     all_error_boxes_idxs = list()
     for ii, eps in enumerate(epsilon):
         error_count = np.zeros((12, 2), dtype=int)
-        error_boxes_idxs = np.empty(1, dtype=int)
+        error_boxes_idxs = np.empty((0, 1), dtype=int)
         for bp in range(12):
             for jj in range(2):
                 cond1 = positions[:, bp, jj] > (bp_thresholds[bp, jj, 1] - eps)
@@ -901,14 +891,18 @@ def max2d_multi(mask: np.ndarray, num_peaks: int, axis: int = 0, smooth: float =
     return maxima
 
 
-def testing_priors(positions, error_matrix, boxes, cm, boxes_idxs, priors_path: str = '/#Common/adrian/Workspace/temp/priors.h5'):
+def testing_priors(positions, error_matrix, boxes, cm, boxes_idxs, priors_path: str = '/#Common/adrian/Workspace/temp/priors.h5', plotit_bybp: bool = False, plotit_summary: bool = False):
 
     from leap_utils.postprocessing import max_simple
 
     priors_data = dd.io.load(priors_path)
     priors = priors_data['priors']
 
+    new_positions = np.copy(positions).astype(np.int)
+
     ref_thorax, _ = max_simple(priors[:, :, 8:9])
+
+    # logging.info(f"   boxes_idxs shape: {boxes_idxs.shape}, boxes shape {boxes.shape}")
 
     cmap = get_cmap('OrRd')
     bp_names = ['head', 'neck', 'frontL', 'middleL', 'backL', 'frontR', 'middleR', 'backR', 'thorax', 'wingL', 'wingR', 'tail']
@@ -921,37 +915,144 @@ def testing_priors(positions, error_matrix, boxes, cm, boxes_idxs, priors_path: 
         bp_to_prior = np.where(error_matrix[box_idx, :])[0]
 
         # Get peaks of confidence map
-        maxima = max2d_multi(cm[ii, :, :, bp_to_prior], num_peaks=5)
-        maxima_val = cm[ii, maxima[:, 0, :], maxima[:, 1, :], bp_to_prior]
+        maxima = max2d_multi(cm[box_idx, :, :, bp_to_prior], num_peaks=5)
+        maxima_val = cm[box_idx, maxima[:, 0, :], maxima[:, 1, :], bp_to_prior]
 
         for jj, bp in enumerate(bp_to_prior):
-            logging.info(f"   {ii+1} of {boxes_idxs.shape[0]}: bp {bp_to_prior}, {bp}")
-            bay_score = np.multiply(maxima_val[:, jj], priors[maxima[:, 0, jj] - col_shift, maxima[:, 1, jj] - row_shift, bp])
+            # logging.info(f"   {ii+1} of {boxes_idxs.shape[0]}: bp {bp_to_prior}, {bp}")
+            col_in_prior = maxima[:, 0, jj] - col_shift
+            col_in_prior[col_in_prior > 119] = 119
+            col_in_prior[col_in_prior < 0] = 0
+            row_in_prior = maxima[:, 1, jj] - row_shift
+            row_in_prior[row_in_prior > 119] = 119
+            row_in_prior[row_in_prior < 0] = 0
+            bay_score = np.multiply(maxima_val[:, jj], priors[col_in_prior, row_in_prior, bp])
+            new_positions[box_idx, bp, :] = maxima[np.argmax(bay_score), :, jj]
+            # logging.info(f"   old: {positions[box_idx, bp, :]}, new: {new_positions[box_idx, bp, :]}, from: {maxima[np.argmax(bay_score), :, jj]}")
 
-            norm = Normalize(vmin=0, vmax=1.2*np.amax(bay_score))
-            plt.figure(figsize=[9, 3])
-            plt.subplot(131)
+            if plotit_bybp:
+                norm = Normalize(vmin=0, vmax=1.2*np.amax(bay_score))
+                plt.figure(figsize=[8, 2])
+                plt.subplot(141)
+                plt.title(box_idx)
+                plt.imshow(boxes[box_idx, :, :, 0], aspect='auto', cmap='gray')
+                plt.scatter(maxima[:, 1, jj], maxima[:, 0, jj], facecolors='none', edgecolors=cmap(norm(bay_score)))
+                plt.scatter(positions[box_idx, 8, 1], positions[box_idx, 8, 0], marker='D', c='yellow')
+                plt.scatter(positions[box_idx, bp, 1], positions[box_idx, bp, 0], s=80, marker='s', facecolors='none', edgecolors='yellow')
+                plt.scatter(maxima[np.argmax(bay_score), 1, jj], maxima[np.argmax(bay_score), 0, jj], s=80, marker='s', facecolors='none', edgecolors='red')
+                plt.subplot(142)
+                plt.title(bp_names[bp])
+                plt.imshow(cm[box_idx, :, :, bp], aspect='auto')
+                plt.scatter(maxima[:, 1, jj], maxima[:, 0, jj], facecolors='none', edgecolors=cmap(norm(bay_score)))
+                plt.scatter(positions[box_idx, bp, 1], positions[box_idx, bp, 0], s=80, marker='s', facecolors='none', edgecolors='yellow')
+                plt.scatter(maxima[np.argmax(bay_score), 1, jj], maxima[np.argmax(bay_score), 0, jj], s=80, marker='s', facecolors='none', edgecolors='red')
+                plt.subplot(143)
+                plt.title('score: {:.6f}'.format(np.amax(bay_score)))
+                plt.imshow(priors[:, :, bp], aspect='auto')
+                plt.scatter(maxima[:, 1, jj], maxima[:, 0, jj], facecolors='none', edgecolors=cmap(norm(bay_score)))
+                plt.scatter(positions[box_idx, bp, 1], positions[box_idx, bp, 0], s=80, marker='s', facecolors='none', edgecolors='yellow')
+                plt.scatter(maxima[np.argmax(bay_score), 1, jj], maxima[np.argmax(bay_score), 0, jj], s=80, marker='s', facecolors='none', edgecolors='red')
+                plt.subplot(144)
+                plt.title("cm x prior")
+                plt.imshow(np.multiply(priors[:, :, bp], cm[box_idx, :, :, bp]), aspect='auto')
+                plt.scatter(maxima[:, 1, jj], maxima[:, 0, jj], facecolors='none', edgecolors=cmap(norm(bay_score)))
+                plt.scatter(positions[box_idx, bp, 1], positions[box_idx, bp, 0], s=80, marker='s', facecolors='none', edgecolors='yellow')
+                plt.scatter(maxima[np.argmax(bay_score), 1, jj], maxima[np.argmax(bay_score), 0, jj], s=80, marker='s', facecolors='none', edgecolors='red')
+                plt.show()
+
+        if plotit_summary:
+            plt.figure()
             plt.title(box_idx)
-            plt.imshow(boxes[ii, :, :, 0], aspect='auto', cmap='gray')
-            plt.scatter(maxima[:, 1, jj], maxima[:, 0, jj], c=cmap(norm(bay_score)))
-            plt.scatter(positions[box_idx, 8, 1], positions[box_idx, 8, 0], marker='D', c='black')
-            plt.scatter(positions[box_idx, bp, 1], positions[box_idx, bp, 0], marker='X', c='blue')
-            # plt.scatter(maxima[np.argmax(bay_score), 1, jj], maxima[np.argmax(bay_score), 0, jj], marker='X', c='green')
-            plt.subplot(132)
-            plt.title(bp_names[bp])
-            plt.imshow(cm[ii, :, :, bp], aspect='auto')
-            plt.scatter(maxima[:, 1, jj], maxima[:, 0, jj], c=cmap(norm(bay_score)))
-            plt.scatter(positions[box_idx, bp, 1], positions[box_idx, bp, 0], marker='X', c='blue')
-            # plt.scatter(maxima[np.argmax(bay_score), 1, jj], maxima[np.argmax(bay_score), 0, jj], marker='X', c='green')
-            plt.subplot(133)
-            plt.title('score after prior: {}'.format(np.amax(bay_score)))
-            plt.imshow(priors[:, :, bp], aspect='auto')
-            plt.scatter(maxima[:, 1, jj], maxima[:, 0, jj], c=cmap(norm(bay_score)))
-            plt.scatter(positions[box_idx, bp, 1], positions[box_idx, bp, 0], marker='X', c='blue')
-            # plt.scatter(maxima[np.argmax(bay_score), 1, jj], maxima[np.argmax(bay_score), 0, jj], marker='X', c='green')
+            plt.imshow(boxes[box_idx, :, :, 0], aspect='auto', cmap='gray')
+            plt.scatter(positions[box_idx, :, 1], positions[box_idx, :, 0], s=30, marker='s', c='red')
+            plt.scatter(new_positions[box_idx, :, 1], new_positions[box_idx, :, 0], s=10, c='blue')
             plt.show()
 
-    return positions
+    return new_positions
+
+
+def training_dataset_priors(plotit: bool = True, network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/temp_save.h5'):
+    """ Runs the pipeline to test the prior application to the predictions on the training dataset, using the model specified by network_path.
+        A temporary save file of the confidence maps and boxes will be saved after the first time in the temp_save_path to speed up repeated calls.
+        Make sure to change temp_save_path or it will use my old temporary save from 24.12.2018 with leap network."""
+
+    # Get positions and confidence maps
+    logging.info(f"   getting positions and confidence maps")
+    if not os.path.exists(temp_save_path):
+        # Load positions and boxes from training data set
+        from leap_utils.postprocessing import load_labels
+        label_pos, _, boxes = load_labels()
+        label_pos = np.flip(np.swapaxes(label_pos, 1, 2), 2)
+
+        # Prepare boxes to be processed
+        net_boxes = normalize_boxes(boxes)
+
+        # Find confidence maps and positions using specified model
+        network = load_network(network_path, image_size=[120, 120])
+        cm = predict_confmaps(network, net_boxes[:, :, :, :1])
+        net_positions, confidence = process_confmaps_simple(cm)
+
+        # Temporary save of results
+        temp_save_data = {'cm': cm,
+                          'label_pos': label_pos,
+                          'net_positions': net_positions,
+                          'net_boxes': net_boxes}
+        dd.io.save(temp_save_path, temp_save_data)
+    else:
+        logging.info(f"   loading temp save")
+        temp_save_data = dd.io.load(temp_save_path)
+        net_boxes = temp_save_data['net_boxes']
+        cm = temp_save_data['cm']
+        net_positions = temp_save_data['net_positions']
+        label_pos = temp_save_data['label_pos']
+
+    # Find errors (error matrix)
+    logging.info(f"   calculating first pass errors")
+    all_error_boxes_idxs, error_matrix = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=False)
+    eu_dist1 = np.sqrt(np.power(net_positions[:, :, 0]-label_pos[:, :, 0], 2) + np.power(net_positions[:, :, 1]-label_pos[:, :, 1], 2))
+    logging.info("   mean error distance: {:02.4f} +- {:02.4f}.".format(np.mean(eu_dist1), np.std(eu_dist1)))
+
+    # Apply priors to errors
+    logging.info(f"   applying priors")
+    new_positions = testing_priors(net_positions, error_matrix[..., 0], net_boxes, cm, all_error_boxes_idxs[0])
+
+    # Try to find errors
+    logging.info(f"   calculating second pass errors")
+    all_error_boxes_idxs2, error_matrix2 = testing_poses(new_positions, epsilon=[0], plotit=False, detailed=False)
+    eu_dist2 = np.sqrt(np.power(new_positions[:, :, 0]-label_pos[:, :, 0], 2) + np.power(new_positions[:, :, 1]-label_pos[:, :, 1], 2))
+    logging.info("   mean error distance: {:02.4f} +- {:02.4f}.".format(np.mean(eu_dist2), np.std(eu_dist2)))
+
+    # Calculate the decrease of error distance
+    eu_dist_change = eu_dist1 - eu_dist2
+    eu_dist_change = eu_dist_change[eu_dist_change.nonzero()]
+
+    # Compare error distance pre- and post- priors
+    if plotit:
+        plt.figure(figsize=[6, 8])
+
+        plt.subplot(311)
+        plt.title('Error distance, before prior')
+        body1 = subgroup(eu_dist1, [0, 1, 8, 11])
+        wings1 = subgroup(eu_dist1, [9, 10])
+        legs1 = subgroup(eu_dist1, [2, 3, 4, 5, 6, 7])
+        plt.hist([eu_dist1, body1, wings1, legs1], bins=np.linspace(0, 6, 10), density=True, histtype='bar', label=['all', 'body', 'wings', 'legs'])
+        plt.legend()
+
+        plt.subplot(312)
+        plt.title('Error distance, after prior')
+        body2 = subgroup(eu_dist2, [0, 1, 8, 11])
+        wings2 = subgroup(eu_dist2, [9, 10])
+        legs2 = subgroup(eu_dist2, [2, 3, 4, 5, 6, 7])
+        plt.hist([eu_dist2, body2, wings2, legs2], bins=np.linspace(0, 6, 10), density=True, histtype='bar', label=['all', 'body', 'wings', 'legs'])
+        plt.legend()
+
+        plt.subplot(313)
+        plt.title('Decrease of error distance (preprior - postprior)')
+        plt.hist(eu_dist_change, bins=np.linspace(-60, 60, 10), histtype='bar', rwidth=0.8)
+        plt.subplots_adjust(bottom=0.05, top=0.95, wspace=0.4)
+
+    # Report result
+    logging.info(f"   {100*(all_error_boxes_idxs[0].shape[0]-all_error_boxes_idxs2[0].shape[0])/all_error_boxes_idxs[0].shape[0]}% of errors fixed by priors, {all_error_boxes_idxs2[0].shape[0]} unfixed.")
 
 
 if __name__ == '__main__':
