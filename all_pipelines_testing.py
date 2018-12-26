@@ -112,7 +112,15 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     # print(new_boxes_idx.shape)
     # testing_priors(positions, error_matrix[..., 0], boxes, cm, new_boxes_idx)
 
-    priors_trainingset_test()
+    # priors_trainingset_test()
+
+    if option == 'deeplabcut':
+        positions = deepLabCut_positions(pose_path)
+    else:
+        pose_data = dd.io.load(pose_path)
+        positions = pose_data['positions']
+    vr = VideoReader(video_path)
+    priors_normal_test(vr, positions, trackfixed_path, pose_path, option=option)
 
     plt.show()
 
@@ -1158,12 +1166,15 @@ def new_testing_priors(positions, error_matrix, boxes, cm, priors_path: str = '/
     new_positions = np.copy(positions).astype(np.int)
 
     if positions.shape[0] != error_matrix.shape[0]:
+        print('pos - error')
         print('conflict of input shapes: {}, {}'.format(positions.shape, error_matrix.shape))
         pass
     elif positions.shape[0] != cm.shape[0]:
+        print('pos - cm')
         print('conflict of input shapes: {}, {}'.format(positions.shape, cm.shape))
         pass
     elif positions.shape[0] != boxes.shape[0]:
+        print('pos - boxes')
         print('conflict of input shapes: {}, {}'.format(positions.shape, boxes.shape))
         pass
 
@@ -1235,47 +1246,58 @@ def new_testing_priors(positions, error_matrix, boxes, cm, priors_path: str = '/
     return new_positions
 
 
-def priors_normal_test(positions, network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5'):
+def priors_normal_test(vr, positions, trackfixed_path, pose_path, overwrite: bool = True, option: str = 'temp', network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5'):
     """ Runs the pipeline to test the prior application to the predictions on the training dataset, using the model specified by network_path.
         A temporary save file of the confidence maps and boxes will be saved after the first time in the temp_save_path to speed up repeated calls.
         Make sure to change temp_save_path or it will use my old temporary save from 24.12.2018 with leap network."""
 
+    nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, pose_path, option=option)
+
     # Find errors (error matrix)
     logging.info(f"   calculating first pass errors")
-    all_error_boxes_idxs, error_matrix = testing_poses(positions, epsilon=[0], plotit=False, detailed=False)
+    all_error_boxes_idxs, error_matrix = testing_poses(positions, epsilon=[0], plotit=False, detailed=True)
 
     # Get boxes and confidence maps
     logging.info(f"   get confidence maps")
-    if not os.path.exists(temp_save_path):
+    if overwrite or not os.path.exists(temp_save_path):
 
         # Get boxes
-        boxes_idx = all_error_boxes_idxs[0]
-        fly_ids = None
-        frame_idx = None
-        boxes = None
+        boxes_idx = all_error_boxes_idxs[0]     # box indexing
+        frame_idx, fly_ids = indexconvertion_box2frame(boxes_idx, nflies)   # frame indexing
+        result_idx = fly_ids + np.arange(0, fly_ids.shape[0]*nflies, nflies)   # index to get specific box from export_boxes()
+
+        logging.info(f"   ---getting frames from video")
+        frames_list = list(vr[frame_idx.tolist()])
+
+        logging.info(f"   ---exporting boxes from video")
+        boxes, *_ = export_boxes(frames_list, box_centers[frame_idx, ...], box_size=np.array([120, 120]), box_angles=fixed_angles[frame_idx, ...])
+        boxes = boxes[result_idx, ...]
 
         # Prepare boxes to be processed
-        net_boxes = normalize_boxes(boxes)
+        boxes = normalize_boxes(boxes)
 
         # Find confidence maps and positions using specified model
+        logging.info(f"   ---processing boxes to get confidence maps")
         network = load_network(network_path, image_size=[120, 120])
-        cm = predict_confmaps(network, net_boxes[:, :, :, :1])
+        cm = predict_confmaps(network, boxes[:, :, :, :1])
 
         # Temporary save of results
         temp_save_data = {'cm': cm,
-                          'net_boxes': net_boxes}
+                          'boxes': boxes,
+                          'boxes_idx': boxes_idx
+                          }
         dd.io.save(temp_save_path, temp_save_data)
     else:
-        logging.info(f"   loading temp save")
+        logging.info(f"   ---loading temp save")
         temp_save_data = dd.io.load(temp_save_path)
-        net_boxes = temp_save_data['net_boxes']
+        boxes = temp_save_data['boxes']
         cm = temp_save_data['cm']
 
     # Preparing inputs for priors (selection of error indexes)
     input_pos = positions[all_error_boxes_idxs[0], ...]
-    input_errors = error_matrix[all_error_boxes_idxs[0], :, 0]
-    input_boxes = net_boxes[all_error_boxes_idxs[0], ...]
-    input_cm = cm[all_error_boxes_idxs[0], ...]
+    input_errors = error_matrix[all_error_boxes_idxs[0], ...]
+    input_boxes = boxes
+    input_cm = cm
 
     # Apply priors to errors
     logging.info(f"   applying priors")
@@ -1286,7 +1308,57 @@ def priors_normal_test(positions, network_path: str = 'Z:/#Common/chainingmic/le
 
     # Try to find errors
     logging.info(f"   calculating second pass errors")
-    all_error_boxes_idxs2, error_matrix2 = testing_poses(positions, epsilon=[0], plotit=False, detailed=False)
+    all_error_boxes_idxs2, error_matrix2 = testing_poses(positions, epsilon=[0], plotit=False, detailed=True)
+
+    # Report result
+    logging.info(f"   {100*(all_error_boxes_idxs[0].shape[0]-all_error_boxes_idxs2[0].shape[0])/all_error_boxes_idxs[0].shape[0]}% of errors fixed by priors, {all_error_boxes_idxs2[0].shape[0]} unfixed.")
+
+    pass
+
+
+def indexconvertion_data2frame(data_idx, dataperfly):
+    """ converts a vector of indexes from cwt_data into frame and fly id according to dataperfly (amount of boxes per fly in the data) """
+
+    # get cumulative dataperfly vector
+    cdataperfly = np.concatenate((np.zeros(1), np.copy(dataperfly)))
+    precdataperfly = 0
+    for ii, idataperfly in enumerate(cdataperfly):
+        precdataperfly += idataperfly
+        cdataperfly[ii] = precdataperfly
+
+    # find fly id
+    f_fly_id = np.searchsorted(cdataperfly, data_idx, side='right')-1
+
+    # convert to frame
+    f = data_idx - cdataperfly[f_fly_id]
+
+    return f, f_fly_id
+
+
+def indexconvertion_frame2box(f, ifly, nflies: int = 2):
+    b = f*nflies + ifly
+    return b
+
+
+def indexconvertion_box2frame(boxes_idx, nflies):
+    f = np.floor_divide(boxes_idx, nflies)
+    f_fly_id = boxes_idx % nflies
+    return f, f_fly_id
+
+
+def indexconvertion_frame2data(f, f_fly_id, dataperfly):
+
+    # get cumulative dataperfly vector
+    cdataperfly = np.concatenate((np.zeros(1), np.copy(dataperfly)))
+    precdataperfly = 0
+    for ii, idataperfly in enumerate(cdataperfly):
+        precdataperfly += idataperfly
+        cdataperfly[ii] = precdataperfly
+
+    # convert to frame
+    data_idx = f + cdataperfly[f_fly_id]
+
+    return data_idx
 
 
 if __name__ == '__main__':
