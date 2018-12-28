@@ -97,7 +97,7 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     #     pose_data = dd.io.load(pose_path)
     #     positions = pose_data['positions']
     #
-    # all_error_boxes_idxs, error_matrix = testing_poses(positions, epsilon=[0])
+    # all_error_boxes_idxs, error_matrix, p_errors = testing_poses(positions, epsilon=[0])
     # error_boxes_idxs = all_error_boxes_idxs[0][1400:1800:5]     # error_boxes_idxs = all_error_boxes_idxs[0][1500:1750:10]
     #
     # vr = VideoReader(video_path)
@@ -114,13 +114,16 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
 
     # priors_trainingset_test()
 
-    if option == 'deeplabcut':
-        positions = deepLabCut_positions(pose_path)
-    else:
-        pose_data = dd.io.load(pose_path)
-        positions = pose_data['positions']
-    vr = VideoReader(video_path)
-    priors_normal_test(vr, positions, trackfixed_path, pose_path, option=option)
+    # if option == 'deeplabcut':
+    #     positions = deepLabCut_positions(pose_path)
+    # else:
+    #     pose_data = dd.io.load(pose_path)
+    #     positions = pose_data['positions']
+    # vr = VideoReader(video_path)
+    # # priors_normal_test(vr, positions, trackfixed_path, pose_path, option=option)
+    # looping_priors_normal(vr, positions, trackfixed_path, pose_path, option=option)
+
+    view_looping_priors_results()
 
     plt.show()
 
@@ -811,7 +814,7 @@ def testing_poses(positions, epsilon=[0, 2, 5], plotit: bool = False, detailed: 
             # print('proportion: ', "{0:.2f}".format(100*error_boxes_idxs.shape[0]/nelements))
             logging.info(f"   proportion: {100*error_boxes_idxs.shape[0]/nelements}")
 
-    return all_error_boxes_idxs, error_matrix
+    return all_error_boxes_idxs, error_matrix, p_errors
 
 
 def Jan_Script(vr, all_boxes_idx, ifly, trackfixed_path, pose_path, nshow: int = 20, option: str = 'temp'):
@@ -895,7 +898,11 @@ def max2d_multi(mask: np.ndarray, num_peaks: int, axis: int = 0, smooth: float =
         if smooth:
             plane = skimage.filters.gaussian(plane, smooth)
         tmp = peak_local_max(plane, num_peaks=num_peaks, exclude_border=exclude_border, min_distance=min_distance)
-        maxima[..., idx] = tmp
+        if tmp.shape[0] == maxima.shape[0]:
+            maxima[..., idx] = tmp
+        else:
+            maxima[:tmp.shape[0], :, idx] = tmp
+            maxima[tmp.shape[0]:, :, idx] = 0
     return maxima
 
 
@@ -1016,7 +1023,7 @@ def training_dataset_priors(plotit: bool = True, network_path: str = 'Z:/#Common
 
     # Find errors (error matrix)
     logging.info(f"   calculating first pass errors")
-    all_error_boxes_idxs, error_matrix = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=False)
+    all_error_boxes_idxs, error_matrix, p_errors = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=False)
     eu_dist1 = np.sqrt(np.power(net_positions[:, :, 0]-label_pos[:, :, 0], 2) + np.power(net_positions[:, :, 1]-label_pos[:, :, 1], 2))
     logging.info("   mean error distance: {:02.4f} +- {:02.4f}.".format(np.mean(eu_dist1), np.std(eu_dist1)))
 
@@ -1026,7 +1033,7 @@ def training_dataset_priors(plotit: bool = True, network_path: str = 'Z:/#Common
 
     # Try to find errors
     logging.info(f"   calculating second pass errors")
-    all_error_boxes_idxs2, error_matrix2 = testing_poses(new_positions, epsilon=[0], plotit=False, detailed=False)
+    all_error_boxes_idxs2, error_matrix2, p_errors2 = testing_poses(new_positions, epsilon=[0], plotit=False, detailed=False)
     eu_dist2 = np.sqrt(np.power(new_positions[:, :, 0]-label_pos[:, :, 0], 2) + np.power(new_positions[:, :, 1]-label_pos[:, :, 1], 2))
     logging.info("   mean error distance: {:02.4f} +- {:02.4f}.".format(np.mean(eu_dist2), np.std(eu_dist2)))
 
@@ -1100,7 +1107,7 @@ def priors_trainingset_test(plotit: bool = True, network_path: str = 'Z:/#Common
 
     # Find errors (error matrix)
     logging.info(f"   calculating first pass errors")
-    all_error_boxes_idxs, error_matrix = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=False)
+    all_error_boxes_idxs, error_matrix, p_errors = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=False)
     eu_dist1 = np.sqrt(np.power(net_positions[:, :, 0]-label_pos[:, :, 0], 2) + np.power(net_positions[:, :, 1]-label_pos[:, :, 1], 2))
     logging.info("   mean error distance: {:02.4f} +- {:02.4f}.".format(np.mean(eu_dist1), np.std(eu_dist1)))
 
@@ -1119,7 +1126,7 @@ def priors_trainingset_test(plotit: bool = True, network_path: str = 'Z:/#Common
 
     # Try to find errors
     logging.info(f"   calculating second pass errors")
-    all_error_boxes_idxs2, error_matrix2 = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=False)
+    all_error_boxes_idxs2, error_matrix2, p_errors2 = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=False)
     eu_dist2 = np.sqrt(np.power(net_positions[:, :, 0]-label_pos[:, :, 0], 2) + np.power(net_positions[:, :, 1]-label_pos[:, :, 1], 2))
     logging.info("   mean error distance: {:02.4f} +- {:02.4f}.".format(np.mean(eu_dist2), np.std(eu_dist2)))
 
@@ -1253,9 +1260,11 @@ def priors_normal_test(vr, positions, trackfixed_path, pose_path, overwrite: boo
 
     nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, pose_path, option=option)
 
+    first_frames = 10000
+
     # Find errors (error matrix)
     logging.info(f"   calculating first pass errors")
-    all_error_boxes_idxs, error_matrix = testing_poses(positions, epsilon=[0], plotit=False, detailed=True)
+    all_error_boxes_idxs, error_matrix, p_errors = testing_poses(positions[:first_frames], epsilon=[0], plotit=False, detailed=True)
 
     # Get boxes and confidence maps
     logging.info(f"   get confidence maps")
@@ -1308,7 +1317,7 @@ def priors_normal_test(vr, positions, trackfixed_path, pose_path, overwrite: boo
 
     # Try to find errors
     logging.info(f"   calculating second pass errors")
-    all_error_boxes_idxs2, error_matrix2 = testing_poses(positions, epsilon=[0], plotit=False, detailed=True)
+    all_error_boxes_idxs2, error_matrix2, p_errors2 = testing_poses(positions[:first_frames], epsilon=[0], plotit=False, detailed=True)
 
     # Report result
     logging.info(f"   {100*(all_error_boxes_idxs[0].shape[0]-all_error_boxes_idxs2[0].shape[0])/all_error_boxes_idxs[0].shape[0]}% of errors fixed by priors, {all_error_boxes_idxs2[0].shape[0]} unfixed.")
@@ -1359,6 +1368,117 @@ def indexconvertion_frame2data(f, f_fly_id, dataperfly):
     data_idx = f + cdataperfly[f_fly_id]
 
     return data_idx
+
+
+def looping_priors_normal(vr, original_positions, trackfixed_path, pose_path, overwrite: bool = False, option: str = 'temp', network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5', testing_priors_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save_priors.h5'):
+    """ Runs the pipeline to test the prior application to the predictions on the training dataset, using the model specified by network_path.
+        A temporary save file of the confidence maps and boxes will be saved after the first time in the temp_save_path to speed up repeated calls.
+        Make sure to change temp_save_path or it will use my old temporary save from 24.12.2018 with leap network."""
+
+    nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, pose_path, option=option)
+
+    first_frames = 1000
+    epsilon = np.arange(-10, 10, 1).tolist()
+    print(epsilon)
+
+    positions = np.copy(original_positions)
+
+    # Find errors (error matrix)
+    logging.info(f"   calculating first pass errors")
+    all_error_boxes_idxs, error_matrix, p_errors = testing_poses(positions[:first_frames], epsilon=epsilon, plotit=False, detailed=False)
+
+    # Get boxes and confidence maps
+    logging.info(f"   get confidence maps")
+    if overwrite or not os.path.exists(temp_save_path):
+
+        # Get boxes
+        boxes_idx = all_error_boxes_idxs[-1]  # box indexing
+        frame_idx, fly_ids = indexconvertion_box2frame(boxes_idx, nflies)   # frame indexing
+        result_idx = fly_ids + np.arange(0, fly_ids.shape[0]*nflies, nflies)   # index to get specific box from export_boxes()
+
+        logging.info(f"   ---getting frames from video")
+        frames_list = list(vr[frame_idx.tolist()])
+
+        logging.info(f"   ---exporting boxes from video")
+        boxes, *_ = export_boxes(frames_list, box_centers[frame_idx, ...], box_size=np.array([120, 120]), box_angles=fixed_angles[frame_idx, ...])
+        boxes = boxes[result_idx, ...]
+
+        # Prepare boxes to be processed
+        boxes = normalize_boxes(boxes)
+
+        # Find confidence maps and positions using specified model
+        logging.info(f"   ---processing boxes to get confidence maps")
+        network = load_network(network_path, image_size=[120, 120])
+        cm = predict_confmaps(network, boxes[:, :, :, :1])
+
+        # Temporary save of results
+        temp_save_data = {'cm': cm,
+                          'boxes': boxes,
+                          'boxes_idx': boxes_idx,
+                          'p_errors': p_errors,
+                          'all_error_boxes_idxs': all_error_boxes_idxs
+                          }
+        dd.io.save(temp_save_path, temp_save_data)
+    else:
+        logging.info(f"   ---loading temp save")
+        temp_save_data = dd.io.load(temp_save_path)
+        boxes = temp_save_data['boxes']
+        boxes_idx = temp_save_data['boxes_idx']
+        cm = temp_save_data['cm']
+
+    p_errors2 = np.zeros((12, 2, len(epsilon)))
+    for ii in range(len(epsilon)):
+        # Preparing inputs for priors (selection of error indexes)
+        iboxes_idx = np.isin(boxes_idx, list(all_error_boxes_idxs[ii]))
+        input_pos = positions[all_error_boxes_idxs[ii], ...]
+        input_errors = error_matrix[all_error_boxes_idxs[ii], ...]
+        input_boxes = boxes[iboxes_idx, ...]
+        input_cm = cm[iboxes_idx, ...]
+
+        # Apply priors to errors
+        logging.info(f"   applying priors")
+        output_pos = new_testing_priors(input_pos, input_errors, input_boxes, input_cm)
+
+        # Replacing new positions
+        positions[all_error_boxes_idxs[ii], ...] = output_pos
+
+        # Try to find errors
+        logging.info(f"   calculating second pass errors")
+        all_error_boxes_idxs2, error_matrix2, ip_errors2 = testing_poses(positions[:first_frames], epsilon=[epsilon[ii]], plotit=False, detailed=False)
+
+        # Report result
+        logging.info(f"   {100*(all_error_boxes_idxs[ii].shape[0]-all_error_boxes_idxs2[0].shape[0])/all_error_boxes_idxs[ii].shape[0]}% of errors fixed by priors, {all_error_boxes_idxs2[0].shape[0]} unfixed.")
+
+        # Save result
+        p_errors2[..., ii] = np.squeeze(ip_errors2)
+
+        # Re-initialise positions
+        positions = np.copy(original_positions)
+
+    testing_priors_data = {'p_errors': p_errors, 'p_errors2': p_errors2, 'epsilon': epsilon}
+    dd.io.save(testing_priors_path, testing_priors_data)
+
+    pass
+
+
+def view_looping_priors_results(testing_priors_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save_priors.h5'):
+    data = dd.io.load(testing_priors_path)
+    p_errors = data['p_errors']
+    p_errors2 = data['p_errors2']
+    epsilon = data['epsilon']
+
+    d_errors = p_errors - p_errors2
+
+    plt.figure()
+    for ii in range(12):
+        plt.subplot(12, 2, ii*2+1)
+        plt.bar(epsilon, d_errors[ii, 0, :])
+        plt.ylim(-8, 8)
+        plt.subplot(12, 2, ii*2+2)
+        plt.bar(epsilon, d_errors[ii, 1, :])
+        plt.ylim(-8, 8)
+
+    pass
 
 
 if __name__ == '__main__':
