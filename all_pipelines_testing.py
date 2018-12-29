@@ -773,6 +773,12 @@ def testing_poses(positions, epsilon=[0, 2, 5], plotit: bool = False, detailed: 
 
     bp_thresholds = np.zeros((12, 2, 2))    # bodypart, x/y, min/max
 
+    # Original values before 29.12.2018:
+    # bp_thresholds[:, 1, 0] = [50, 40, 20, 10, 20, 50, 60, 50, 50, 10, 50, 50]
+    # bp_thresholds[:, 1, 1] = [80, 70, 70, 60, 70, 100, 110, 100, 80, 70, 110, 80]
+    # bp_thresholds[:, 0, 0] = [10, 25, 5, 25, 50, 5, 25, 50, 40, 60, 60, 60]
+    # bp_thresholds[:, 0, 1] = [60, 75, 60, 100, 100, 60, 100, 100, 90, 120, 120, 100]
+
     # x min
     bp_thresholds[:, 1, 0] = [50, 40, 20, 10, 20, 50, 60, 50, 50, 10, 50, 50]
     # x max
@@ -1186,14 +1192,31 @@ def new_testing_priors(positions, error_matrix, boxes, cm, priors_path: str = '/
         pass
 
     ref_thorax, _ = max_simple(priors[:, :, 8:9])
+    ref_neck, _ = max_simple(priors[:, :, 1:2])
+    ref_tail, _ = max_simple(priors[:, :, 11:12])
 
     cmap = get_cmap('OrRd')
     bp_names = ['head', 'neck', 'frontL', 'middleL', 'backL', 'frontR', 'middleR', 'backR', 'thorax', 'wingL', 'wingR', 'tail']
 
     for ii in range(positions.shape[0]):
 
-        row_shift = int(ref_thorax[0, 1]-positions[ii, 8, 1])
-        col_shift = int(ref_thorax[0, 0]-positions[ii, 8, 0])
+        # Use thorax, neck, tail or no reference, for alignment of the prior
+        if error_matrix[ii, 8] == 0:
+            # print('thorax')
+            row_shift = int(ref_thorax[0, 1]-positions[ii, 8, 1])
+            col_shift = int(ref_thorax[0, 0]-positions[ii, 8, 0])
+        elif error_matrix[ii, 1] == 0:
+            # print('neck')
+            row_shift = int(ref_neck[0, 1]-positions[ii, 1, 1])
+            col_shift = int(ref_neck[0, 0]-positions[ii, 1, 0])
+        elif error_matrix[ii, 11] == 0:
+            # print('tail')
+            row_shift = int(ref_tail[0, 1]-positions[ii, 11, 1])
+            col_shift = int(ref_tail[0, 0]-positions[ii, 11, 0])
+        else:
+            # print('none')
+            row_shift = 0
+            col_shift = 0
 
         bp_to_prior = np.where(error_matrix[ii, :])[0]
 
@@ -1253,7 +1276,7 @@ def new_testing_priors(positions, error_matrix, boxes, cm, priors_path: str = '/
     return new_positions
 
 
-def priors_normal_test(vr, positions, trackfixed_path, pose_path, overwrite: bool = True, option: str = 'temp', network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5'):
+def priors_normal_test(vr, positions, trackfixed_path, pose_path, overwrite: bool = False, option: str = 'temp', network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5'):
     """ Runs the pipeline to test the prior application to the predictions on the training dataset, using the model specified by network_path.
         A temporary save file of the confidence maps and boxes will be saved after the first time in the temp_save_path to speed up repeated calls.
         Make sure to change temp_save_path or it will use my old temporary save from 24.12.2018 with leap network."""
@@ -1377,8 +1400,8 @@ def looping_priors_normal(vr, original_positions, trackfixed_path, pose_path, ov
 
     nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, pose_path, option=option)
 
-    first_frames = 1000
-    epsilon = np.arange(-10, 10, 1).tolist()
+    first_frames = 5000
+    epsilon = np.arange(-12, 13, 1).tolist()
     print(epsilon)
 
     positions = np.copy(original_positions)
@@ -1431,7 +1454,7 @@ def looping_priors_normal(vr, original_positions, trackfixed_path, pose_path, ov
         # Preparing inputs for priors (selection of error indexes)
         iboxes_idx = np.isin(boxes_idx, list(all_error_boxes_idxs[ii]))
         input_pos = positions[all_error_boxes_idxs[ii], ...]
-        input_errors = error_matrix[all_error_boxes_idxs[ii], ...]
+        input_errors = error_matrix[all_error_boxes_idxs[ii], :, ii]
         input_boxes = boxes[iboxes_idx, ...]
         input_cm = cm[iboxes_idx, ...]
 
@@ -1467,18 +1490,62 @@ def view_looping_priors_results(testing_priors_path: str = 'Z:/#Common/adrian/Wo
     p_errors2 = data['p_errors2']
     epsilon = data['epsilon']
 
-    d_errors = p_errors - p_errors2
+    # Relative percent of proportion change
+    d_errors = (p_errors - p_errors2) / p_errors
 
-    plt.figure()
+    # plt.figure()
+    # for ii in range(12):
+    #     plt.subplot(12, 2, ii*2+1)
+    #     plt.bar(epsilon, d_errors[ii, 0, :])
+    #     plt.ylim(-3, 3)
+    #     plt.subplot(12, 2, ii*2+2)
+    #     plt.bar(epsilon, d_errors[ii, 1, :])
+    #     plt.ylim(-3, 3)
+
+    bp_names = ['head', 'neck', 'frontL', 'middleL', 'backL', 'frontR', 'middleR', 'backR', 'thorax', 'wingL', 'wingR', 'tail']
+    plt.figure(figsize=[10, 10])
     for ii in range(12):
-        plt.subplot(12, 2, ii*2+1)
-        plt.bar(epsilon, d_errors[ii, 0, :])
-        plt.ylim(-8, 8)
-        plt.subplot(12, 2, ii*2+2)
-        plt.bar(epsilon, d_errors[ii, 1, :])
-        plt.ylim(-8, 8)
+        plt.subplot(12, 1, ii+1)
+        width = 0.35
+        plt.bar(np.arange(len(epsilon)), d_errors[ii, 0, :], width, label='y', zorder=3)
+        plt.bar(np.arange(len(epsilon)) + width, d_errors[ii, 1, :], width, label='x', zorder=3)
+        plt.legend(loc='upper right', prop={'size': 8})
+        plt.ylim(-2, 2)
+        plt.xlim(-0.5, len(epsilon)+2)
+        plt.ylabel(bp_names[ii])
+        plt.gca().grid(b=True, which='major', axis='y', zorder=0)
+        if ii == 11:
+            plt.xticks(np.arange(len(epsilon)) + width / 2, map(str, epsilon))
+            plt.xlabel('Epsilon (pixels reducing the error detection thresholds per body part, + = narrower)')
+        else:
+            plt.xticks([], [])
+        if ii == 0:
+            plt.title('Proportion of Errors fixed (Pre-prior - Post-prior / Pre-prior)')
+        plt.tight_layout()
+
+    # all-x, all-y, body, ..., wings, ..., legs, ...
+
+    # # Subgrouping data
+    # body = subgroup(eu_dist, [0, 1, 8, 11])
+    # wings = subgroup(eu_dist, [9, 10])
+    # legs = subgroup(eu_dist, [2, 3, 4, 5, 6, 7])
+    #
+    # # Plot
+    # plt.hist([eu_dist, body, wings, legs], bins=np.arange(-13, 13, 1), density=True, histtype='bar')
+    # plt.legend()
 
     pass
+
+
+def error_subgroup(X, parts, xory, epsilon):
+
+    subgrouped = np.empty([0])
+    for count, ipart in enumerate(parts):
+        for count3, eps in enumerate(epsilon):
+            for count2, ixory in enumerate(xory):
+                subgrouped = np.concatenate((subgrouped, X[ipart, xory, eps]), axis=0)
+
+    return subgrouped
 
 
 if __name__ == '__main__':
