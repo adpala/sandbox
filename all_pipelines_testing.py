@@ -1516,11 +1516,32 @@ def view_looping_priors_results(testing_priors_path: str = 'Z:/#Common/adrian/Wo
         plt.gca().grid(b=True, which='major', axis='y', zorder=0)
         if ii == 11:
             plt.xticks(np.arange(len(epsilon)) + width / 2, map(str, epsilon))
-            plt.xlabel('Epsilon (pixels reducing the error detection thresholds per body part, + = narrower)')
+            plt.xlabel('Epsilon (pixels reducing the error detection thresholds per body part, + = narrower accepted range)')
         else:
             plt.xticks([], [])
         if ii == 0:
             plt.title('Proportion of Errors fixed (Pre-prior - Post-prior / Pre-prior)')
+        plt.tight_layout()
+
+    bp_names = ['head', 'neck', 'frontL', 'middleL', 'backL', 'frontR', 'middleR', 'backR', 'thorax', 'wingL', 'wingR', 'tail']
+    plt.figure(figsize=[10, 10])
+    for ii in range(12):
+        plt.subplot(12, 1, ii+1)
+        width = 0.35
+        plt.bar(np.arange(len(epsilon)), p_errors[ii, 0, :], width, label='y', zorder=3)
+        plt.bar(np.arange(len(epsilon)) + width, p_errors[ii, 1, :], width, label='x', zorder=3)
+        plt.legend(loc='upper right', prop={'size': 8})
+        plt.ylim(0, 25)
+        plt.xlim(-0.5, len(epsilon)+2)
+        plt.ylabel(bp_names[ii])
+        plt.gca().grid(b=True, which='major', axis='y', zorder=0)
+        if ii == 11:
+            plt.xticks(np.arange(len(epsilon)) + width / 2, map(str, epsilon))
+            plt.xlabel('Epsilon (pixels reducing the error detection thresholds per body part, + = narrower accepted range)')
+        else:
+            plt.xticks([], [])
+        if ii == 0:
+            plt.title('Proportion of Errors Pre-prior')
         plt.tight_layout()
 
     # all-x, all-y, body, ..., wings, ..., legs, ...
