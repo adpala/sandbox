@@ -112,8 +112,10 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     # print(new_boxes_idx.shape)
     # testing_priors(positions, error_matrix[..., 0], boxes, cm, new_boxes_idx)
 
-    # priors_trainingset_test()
+    # TEST #1:  TEST WITH THE TRAINING DATA SET
+    priors_trainingset_test()
 
+    # TEST #2:  TEST WITH THE VIDEO
     # if option == 'deeplabcut':
     #     positions = deepLabCut_positions(pose_path)
     # else:
@@ -123,7 +125,7 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     # # priors_normal_test(vr, positions, trackfixed_path, pose_path, option=option)
     # looping_priors_normal(vr, positions, trackfixed_path, pose_path, option=option)
 
-    view_looping_priors_results()
+    # view_looping_priors_results()
 
     plt.show()
 
@@ -1113,7 +1115,7 @@ def priors_trainingset_test(plotit: bool = True, network_path: str = 'Z:/#Common
 
     # Find errors (error matrix)
     logging.info(f"   calculating first pass errors")
-    all_error_boxes_idxs, error_matrix, p_errors = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=False)
+    all_error_boxes_idxs, error_matrix, p_errors = testing_poses(net_positions, epsilon=[0], plotit=False, detailed=True)
     eu_dist1 = np.sqrt(np.power(net_positions[:, :, 0]-label_pos[:, :, 0], 2) + np.power(net_positions[:, :, 1]-label_pos[:, :, 1], 2))
     logging.info("   mean error distance: {:02.4f} +- {:02.4f}.".format(np.mean(eu_dist1), np.std(eu_dist1)))
 
@@ -1125,7 +1127,7 @@ def priors_trainingset_test(plotit: bool = True, network_path: str = 'Z:/#Common
 
     # Apply priors to errors
     logging.info(f"   applying priors")
-    output_pos = new_testing_priors(input_pos, input_errors, input_boxes, input_cm)
+    output_pos = new_testing_priors(input_pos, input_errors, input_boxes, input_cm, plotit_bybp=plotit)
 
     # Replacing new positions
     net_positions[all_error_boxes_idxs[0], ...] = output_pos
@@ -1283,7 +1285,7 @@ def priors_normal_test(vr, positions, trackfixed_path, pose_path, overwrite: boo
 
     nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, pose_path, option=option)
 
-    first_frames = 10000
+    first_frames = 5000
 
     # Find errors (error matrix)
     logging.info(f"   calculating first pass errors")
