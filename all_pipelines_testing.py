@@ -16,10 +16,12 @@ from leap_utils.preprocessing import angles
 from videoreader import VideoReader
 from leap_utils.plot import vplay, annotate, confmaps, boxpos
 from skimage.feature import peak_local_max
-
+from leap_utils.postprocessing import load_labels
 from leap_utils.preprocessing import export_boxes, angles, normalize_boxes
 from leap_utils.postprocessing import process_confmaps_simple
 from leap_utils.predict import predict_confmaps, load_network
+from scipy import stats
+from sklearn.metrics import confusion_matrix
 
 np.seterr(divide='ignore', invalid='ignore')
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +29,7 @@ logging.basicConfig(level=logging.INFO)
 
 def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
 
-    # figuring out paths
+    # Paths
     if iswin():
         root = 'Z:/#Common/'
     elif ismac():
@@ -36,101 +38,110 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
         root = '/scratch/clemens10/'
 
     if option == 'deeplabcut':
-        res_path = root+'adrian/Workspace/temp/deeplabcut'
         expID = 'localhost-20180720_182837'
-        pose_path = f"{root}/chainingmic/deeplabcut/localhost-20180720_182837_boxesDeepCut_resnet50_flyposeNov26shuffle1_600000.h5"
+        res_path = root+f"adrian/Workspace/temp/deeplabcut/{expID}"
+        poses_path = f"{root}/chainingmic/deeplabcut/localhost-20180720_182837_boxesDeepCut_resnet50_flyposeNov26shuffle1_600000.h5"
     elif option == 'temp':
-        res_path = root+'adrian/Workspace/temp/leap'
-        pose_path = f"{root}/chainingmic/res/{expID}/{expID}_poses.h5"
+        res_path = root+f"adrian/Workspace/temp/leap/{expID}"
+        poses_path = f"{root}/chainingmic/res/{expID}/{expID}_poses.h5"
     elif option == 'leap':
-        res_path = root+'chainingmic/res'
-        pose_path = f"{res_path}/{expID}/{expID}_poses.h5"
-    elif option == 'training':
-        res_path = root+'adrian/Workspace/temp/training'
+        res_path = root+f"chainingmic/res/{expID}/adrian"
+        poses_path = f"{res_path[:-7]}/{expID}_poses.h5"
     else:
-        logging.info(f"   no option was given: deeplabcut, temp, leap or training")
+        logging.info(f"   no option was given: deeplabcut, temp, leap")
         pass
 
-    if not os.path.exists(f"{res_path}/{expID}"):
-        os.mkdir(f"{res_path}/{expID}")
+    # Creates folders if not existing
+    if option == 'leap':
+        if not os.path.exists(f"{res_path[:-7]}"):
+            os.mkdir(f"{res_path[:-7]}")
+        if not os.path.exists(f"{res_path}"):
+            os.mkdir(f"{res_path}")
+    else:
+        if not os.path.exists(f"{res_path}"):
+            os.mkdir(f"{res_path}")
 
-    cwt_path = f"{res_path}/{expID}/{expID}_cwt.h5"
-    tsne_path = f"{res_path}/{expID}/{expID}_tsne.h5"
-    ws_path = f"{res_path}/{expID}/{expID}_ws.h5"
-    all_labels_path = f"{res_path}/{expID}/{expID}_all_labels.h5"
-    confmat_path = f"{res_path}/{expID}/{expID}_confmat.h5"
+    logging.info(f"   working with option = {option}, result path = {res_path}, poses path = {poses_path}.")
+
+    cwt_path = f"{res_path}/{expID}_cwt.h5"
+    tsne_path = f"{res_path}/{expID}_tsne.h5"
+    ws_path = f"{res_path}/{expID}_ws.h5"
+    all_labels_path = f"{res_path}/{expID}_all_labels.h5"
+    confmat_path = f"{res_path}/{expID}_confmat.h5"
     trackfixed_path = f"{root}/chainingmic/res/{expID}/{expID}_tracks_fixed.h5"
     video_path = f"{root}/chainingmic/dat/{expID}/{expID}.mp4"
     if not os.path.exists(video_path):
         video_path = f"{root}/chainingmic/dat.processed/{expID}/{expID}.mp4"
-    freq_path = f"{res_path}/{expID}/cluster_freq"
-    if not os.path.exists(freq_path):
-        os.mkdir(freq_path)
-    densities_path = f"{res_path}/{expID}/cluster_dens"
-    if not os.path.exists(densities_path):
-        os.mkdir(densities_path)
+    # freq_path = f"{res_path}/cluster_freq"
+    # if not os.path.exists(freq_path):
+    #     os.mkdir(freq_path)
+    # densities_path = f"{res_path}/cluster_dens"
+    # if not os.path.exists(densities_path):
+    #     os.mkdir(densities_path)
 
-    # error_distance(f"{root}/chainingmic/deeplabcut/DeepCut_resnet50_flyposeNov26shuffle1_1030000-snapshot-1030000.h5")
-    # cwt_data = cwt_pipeline(trackfixed_path, pose_path, cwt_path, option=option)
+    # Load Data from previously run analysis ######################################################################################
+
     # cwt_data = dd.io.load(cwt_path)
-    # tsne_data = tsne_pipeline(cwt_data, tsne_path, prandom=0.5)
     # tsne_data = dd.io.load(tsne_path)
+    # ws_data = dd.io.load(ws_path)
+    # all_labels_data = dd.io.load(all_labels_path)
+
+    # Pipeline steps (on Video) ###################################################################################################
+
+    # cwt_data = cwt_pipeline(trackfixed_path, poses_path, cwt_path, option=option)
+    # tsne_data = tsne_pipeline(cwt_data['cwt'], tsne_path, prandom=0.5, overwrite=True)
     # ws_data = watershed_pipeline(tsne_data, ws_path)
+    # all_labels_data = labeling_pipeline(tsne_data, ws_data, cwt_data, all_labels_path)
+    # transitions_pipeline(all_labels_data)
+    # confmat_data = confusion_mat(confmat_path, tsne_data, all_labels_data)
+
+    # Visualization functions   ###################################################################################################
+
+    ## Watershed
+    # tsne_data = dd.io.load(tsne_path)
     # ws_data = dd.io.load(ws_path)
     # plot_watershed(tsne_data, ws_data)
-    # all_labels_data = labeling_pipeline(tsne_data, ws_data, cwt_data, all_labels_path)
+
+    ## Labeling
     # all_labels_data = dd.io.load(all_labels_path)
     # plot_labeling(ws_data, tsne_data, all_labels_data)
-    # confmat_data = confusion_mat(confmat_path, tsne_data, all_labels_data)
-    # transitions_pipeline(all_labels_data)
 
+    ## Cluster Movies
     # vr = VideoReader(video_path)
-    # all_labels_data = dd.io.load(all_labels_path)
     # all_labels = all_labels_data['all_labels']
     # clusters, cluster_counts = np.unique(all_labels, return_counts=True)
     # sorted_clusters = clusters[np.argsort(-cluster_counts)]
-    # get_multi_movie(vr, sorted_clusters[10], all_labels, pose_path, trackfixed_path, option=option)
+    # get_multi_movie(vr, sorted_clusters[10], all_labels, poses_path, trackfixed_path, option=option)
+
+    # Network Model Tests (on Training Data)    ###################################################################################
+
+    # path_to_model_pred = f"{root}/chainingmic/deeplabcut/DeepCut_resnet50_flyposeNov26shuffle1_1030000-snapshot-1030000.h5"
+    # error_distance(path_to_model_pred)
+
+    # Prior Tests (on Training Data)    ###########################################################################################
+
+    # priors_trainingset_test()
+
+    # Priot Tests (on Video)    ###################################################################################################
 
     # if option == 'deeplabcut':
-    #     positions = deepLabCut_positions(pose_path)
+    #     positions = deepLabCut_positions(poses_path)
     # else:
-    #     pose_data = dd.io.load(pose_path)
-    #     positions = pose_data['positions']
-    #
-    # all_error_boxes_idxs, error_matrix, p_errors = testing_poses(positions, epsilon=[0])
-    # error_boxes_idxs = all_error_boxes_idxs[0][1400:1800:5]     # error_boxes_idxs = all_error_boxes_idxs[0][1500:1750:10]
-    #
-    # vr = VideoReader(video_path)
-    # nsamples = 10
-    # boxes, cm, new_boxes_idx = reget_boxes(vr, error_boxes_idxs[:nsamples], trackfixed_path, pose_path, ifly=1,  option='leap')
-    #
-    # print(boxes.shape)
-    # plt.figure()
-    # plt.title('data boxes')
-    # plt.imshow(boxes[5, :, :, 0], aspect='auto', cmap='gray')
-
-    # print(new_boxes_idx.shape)
-    # testing_priors(positions, error_matrix[..., 0], boxes, cm, new_boxes_idx)
-
-    # TEST #1:  TEST WITH THE TRAINING DATA SET
-    priors_trainingset_test()
-
-    # TEST #2:  TEST WITH THE VIDEO
-    # if option == 'deeplabcut':
-    #     positions = deepLabCut_positions(pose_path)
-    # else:
-    #     pose_data = dd.io.load(pose_path)
+    #     pose_data = dd.io.load(poses_path)
     #     positions = pose_data['positions']
     # vr = VideoReader(video_path)
-    # # priors_normal_test(vr, positions, trackfixed_path, pose_path, option=option)
-    # looping_priors_normal(vr, positions, trackfixed_path, pose_path, option=option)
 
+    ## Normal test
+    # priors_normal_test(vr, positions, trackfixed_path, poses_path, option=option)
+
+    ## Looping test
+    # looping_priors_normal(vr, positions, trackfixed_path, poses_path, option=option)
     # view_looping_priors_results()
 
     plt.show()
 
 
-def load_fixed_tracks(trackfixed_path, pose_path, option: str = 'temp'):
+def load_fixed_tracks(trackfixed_path, poses_path, option: str = 'temp'):
 
     track_data = dd.io.load(trackfixed_path)
     tracks = track_data['lines']
@@ -148,13 +159,13 @@ def load_fixed_tracks(trackfixed_path, pose_path, option: str = 'temp'):
 
     dataperfly = np.zeros(nflies, dtype=np.int)
     if option == 'deeplabcut':
-        positions = deepLabCut_positions(pose_path)
+        positions = deepLabCut_positions(poses_path)
         fly_id = np.zeros(positions.shape[0])
         for ifly in range(nflies):
             fly_id[ifly::nflies] = ifly
         fixed_angles = 180 + angles(heads, tails)
     else:
-        pose_data = dd.io.load(pose_path)
+        pose_data = dd.io.load(poses_path)
         positions = pose_data['positions']
         fly_id = pose_data['fly_id']
         fixed_angles = unflatten(pose_data['fixed_angles'], nflies)
@@ -165,8 +176,8 @@ def load_fixed_tracks(trackfixed_path, pose_path, option: str = 'temp'):
     return nflies, box_centers, dataperfly, fixed_angles, fly_id, positions
 
 
-def deepLabCut_positions(dlc_pose_path, print_example: bool = False):
-    data = dd.io.load(dlc_pose_path)
+def deepLabCut_positions(dlc_poses_path, print_example: bool = False):
+    data = dd.io.load(dlc_poses_path)
     A = data['df_with_missing']
     B = np.asarray(A.iloc[:, :])
     B = np.delete(B, np.arange(2, B.shape[1], 3), 1)
@@ -174,17 +185,18 @@ def deepLabCut_positions(dlc_pose_path, print_example: bool = False):
 
     # Example to test
     if print_example:
-        logging.info(f"   original")
+        logging.info(f"   original:")
         print(A['DeepCut_resnet50_flyposeNov26shuffle1_600000']['head'])
         logging.info(f"   shape: {B.shape}")
         print(B[:5, 0:2])
-        logging.info(f"   reshaped")
+        logging.info(f"   reshaped:")
         print(positions[:5, 0, :])
 
     return positions
 
 
-def cwt_pipeline(trackfixed_path, pose_path, cwt_path, min_scale: float = 0, max_scale: float = np.log2(50), nscale: int = 25,  option: str = 'temp'):
+def cwt_pipeline(trackfixed_path, poses_path, cwt_path, min_scale: float = 0, max_scale: float = np.log2(50), nscale: int = 25,  option: str = 'temp'):
+    """ Time for normal video with 360,000 boxes and 25 scales: 3.63 minutes """
 
     logging.info(f"   ---- cwt pipeline ----")
 
@@ -194,7 +206,7 @@ def cwt_pipeline(trackfixed_path, pose_path, cwt_path, min_scale: float = 0, max
 
     # Get data
     logging.info(f"   getting data.")
-    nflies, _, _, _, fly_id, positions = load_fixed_tracks(trackfixed_path, pose_path, option=option)
+    nflies, _, _, _, fly_id, positions = load_fixed_tracks(trackfixed_path, poses_path, option=option)
     logging.info(f"   nflies: {nflies}, positions shape: {positions.shape}.")
 
     # Select data
@@ -226,7 +238,7 @@ def cwt_pipeline(trackfixed_path, pose_path, cwt_path, min_scale: float = 0, max
                 power = (abs(cfs)) ** 2
                 power[np.isnan(power)] = 0
 
-                ifly_cwt_array[:, scale_len*n:(n+1)*scale_len] = np.swapaxes(power, 0, 1)
+                ifly_cwt_array[:, scale_len*n:(n+1)*scale_len] = np.swapaxes(power, 0, 1)       # FIX IN FUTURE WITH np.concatenate instead of specific slicing
                 n += 1
 
         cwt_array = np.concatenate((cwt_array, ifly_cwt_array))
@@ -252,10 +264,10 @@ def cwt_pipeline(trackfixed_path, pose_path, cwt_path, min_scale: float = 0, max
     return cwt_data
 
 
-def tsne_pipeline(cwt_data, tsne_path, overwrite: bool = False, prandom: int = 0.1, max_iter=5000, start_late_exag_iter=4000, perplexity=[15, 150], late_exag_coeff=3):
+def tsne_pipeline(cwt_array, tsne_path, overwrite: bool = False, prandom: int = 0.1, max_iter=5000, start_late_exag_iter=4000, perplexity=[15, 150], late_exag_coeff=3):
+    """ Time for normal video with 360,000 boxes and 25 scales, with prandom 0.5: 30.72 minutes """
 
     logging.info(f"   ---- tsne pipeline ----")
-    cwt_array = cwt_data['cwt']
 
     logging.info(f"   PCA.")
     X = cwt_array
@@ -299,6 +311,7 @@ def tsne_pipeline(cwt_data, tsne_path, overwrite: bool = False, prandom: int = 0
 
 
 def watershed_pipeline(tsne_data, ws_path, bw: int = 2, grid_size: int = 100, min_distance: int = 2, connectivity: int = 8):
+    """ Time for normal video with 360,000 boxes and 25 scales, with prandom 0.5: 1.43 minutes """
 
     logging.info(f"   ---- watershed pipeline ----")
 
@@ -378,6 +391,7 @@ def do_kdtree(combined_arrays, points, k: int = 1):
 
 
 def labeling_pipeline(tsne_data, ws_data, cwt_data, all_labels_path):
+    """ Time for normal video with 360,000 boxes and 25 scales, with prandom 0.5: 4.69 minutes """
 
     logging.info(f"   ---- labeling pipeline ----")
     logging.info(f"   loading data for labeling.")
@@ -452,7 +466,7 @@ def plot_labeling(ws_data, tsne_data, all_labels_data):
 def subgroup(X, parts):
 
     subgrouped = np.empty([0])
-    for count, ipart in enumerate(parts):
+    for ipart in parts:
         subgrouped = np.concatenate((subgrouped, X[:, ipart]), axis=0)
 
     return subgrouped
@@ -461,8 +475,6 @@ def subgroup(X, parts):
 def error_distance(pred_path, saveit: bool = False):
 
     logging.info(f"   ---- error distance ----")
-
-    from leap_utils.postprocessing import load_labels
 
     # Load labels
     label_pos, _, boxes = load_labels()
@@ -480,7 +492,7 @@ def error_distance(pred_path, saveit: bool = False):
     legs = subgroup(eu_dist, [2, 3, 4, 5, 6, 7])
 
     # Plot
-    plt.hist([eu_dist, body, wings, legs], bins=np.linspace(0, 10, 21), density=True, histtype='bar', label=['all', 'body', 'wings', 'legs'])
+    plt.hist([eu_dist, body, wings, legs], bins=np.linspace(0, 10, 20), density=True, histtype='bar', label=['all', 'body', 'wings', 'legs'])
     plt.legend()
 
     # Save plot (where the pred_path came from)
@@ -489,27 +501,24 @@ def error_distance(pred_path, saveit: bool = False):
         plt.savefig(histFig)
 
 
-def confusion_mat(confmat_path, tsne_data, all_labels_data, k=1, p_test=0.5, saveit: bool = False):
+def confusion_mat(confmat_path, tsne_data, all_labels_data, k=1, p_test=0.5, saveit: bool = False, plotit: bool = False):
+    """ Time for normal video with 360,000 boxes and 25 scales, with prandom 0.5: 28.59 seconds """
 
     logging.info(f"   ---- confusion matrix ----")
-
-    from scipy import stats
-    from sklearn.metrics import confusion_matrix
 
     # load all required data
     all_X50 = tsne_data['all_X50']
     random_data_idx = tsne_data['random_data_idx']
     Z_labels = all_labels_data['Z_labels']
 
+    # Divide data in test and train sets
     test_meta_idx = np.random.choice(random_data_idx.shape[0], int(p_test*random_data_idx.shape[0]), replace=False)
     train_meta_idx = np.arange(random_data_idx.shape[0])[~test_meta_idx]
     test_idx = random_data_idx[test_meta_idx]
     train_idx = random_data_idx[train_meta_idx]
     ground_truth = Z_labels[test_meta_idx]
 
-    conf = np.zeros(test_idx.shape[0], dtype=bool)
-
-    # set nearest neighbor algorithm with train and embed test data
+    # Set nearest neighbor algorithm with train and embed test data
     test_neighbors = do_kdtree(all_X50[train_idx, ...], list(all_X50[test_idx, ...]), k=k)
     if k == 1:
         test_results = Z_labels[train_meta_idx[test_neighbors[:]]]  # Use closest neighbor
@@ -518,20 +527,26 @@ def confusion_mat(confmat_path, tsne_data, all_labels_data, k=1, p_test=0.5, sav
     else:
         test_results, test_counts = stats.mode(Z_labels[train_meta_idx[test_neighbors]], axis=1)    # Use mode neighbor
 
-    # compare true versus found labels in a confusion matrix
+    # Compare true versus found labels in confusion matrix
     conf_mat = confusion_matrix(ground_truth, test_results)
+
+    # Initiliaze confusion matrix
+    conf = np.zeros(test_idx.shape[0], dtype=bool)
 
     for ii in range(test_results.shape[0]):
         conf[ii] = test_results[ii] == ground_truth[ii]
     confmat_data = {'conf': conf, 'k': k, 'p_test': p_test}
 
     logging.info(f"   k: {k}, p = {np.sum(conf)/conf.shape[0]}")
-    plt.figure(k)
-    plot_confusion_matrix(conf_mat, normalize=True, title='Normalized with k={}'.format(k))
-    if saveit:
-        plot_path = confmat_path[:-3] + '_k' + str(k) + '.png'
-        plt.savefig(plot_path)
-        dd.io.save(confmat_path, confmat_data)
+    if plotit or saveit:
+        plt.figure(k)
+        plot_confusion_matrix(conf_mat, normalize=True, title='Normalized with k={}'.format(k))
+        if saveit:
+            plot_path = confmat_path[:-3] + '_k' + str(k) + '.png'
+            plt.savefig(plot_path)
+            dd.io.save(confmat_path, confmat_data)
+            if not plotit:
+                plt.close(fig=k)
 
     return confmat_data
 
@@ -566,8 +581,8 @@ def transition_matrix(transitions, tau: int = 1, itself: bool = False):
             M[i][j] += 1
 
     s = np.sum(M, axis=1)
-    # M[s > 0, :] = np.divide(M[s > 0, :].T, s[s > 0]).T
-    M[s.nonzero(), :] = np.divide(M[s.nonzero(), :].T, s[s.nonzero()]).T
+    M[s > 0, :] = np.divide(M[s > 0, :].T, s[s > 0]).T
+    # M[s.nonzero(), :] = np.divide(M[s.nonzero(), :].T, s[s.nonzero()]).T
 
     return M, states
 
@@ -601,6 +616,7 @@ def transitions_clustering(M, labels: np.array, option: str = 'row', n_clusters:
 
 
 def transitions_pipeline(all_labels_data, taus=[1, 10, 100, 1000, 5000], clip_min=0.025, clip_max=0.15):
+    """ Time for normal video with 360,000 boxes and 25 scales, with prandom 0.5: 8 seconds """
 
     logging.info(f"   ---- transitions pipeline ----")
 
@@ -665,11 +681,11 @@ def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) > stepsize)[0] + 1)
 
 
-def get_multi_movie(vr, icluster: int, labels, pose_path, trackfixed_path, option: str = 'temp'):
+def get_multi_movie(vr, icluster: int, labels, poses_path, trackfixed_path, option: str = 'temp'):
 
     logging.info(f"   ---- plotting movies for cluster {icluster} ----")
 
-    nflies, box_centers, dataperfly, fixed_angles, fly_id, positions = load_fixed_tracks(trackfixed_path, pose_path, option)
+    nflies, box_centers, dataperfly, fixed_angles, fly_id, positions = load_fixed_tracks(trackfixed_path, poses_path, option)
 
     # Indexes intervals
     all_intervals_idx = consecutive(np.squeeze(np.asarray(np.where(labels == icluster))))
@@ -825,9 +841,9 @@ def testing_poses(positions, epsilon=[0, 2, 5], plotit: bool = False, detailed: 
     return all_error_boxes_idxs, error_matrix, p_errors
 
 
-def Jan_Script(vr, all_boxes_idx, ifly, trackfixed_path, pose_path, nshow: int = 20, option: str = 'temp'):
+def Jan_Script(vr, all_boxes_idx, ifly, trackfixed_path, poses_path, nshow: int = 20, option: str = 'temp'):
 
-    nflies, box_centers, dataperfly, fixed_angles, fly_id, positions = load_fixed_tracks(trackfixed_path, pose_path, option='leap')
+    nflies, box_centers, dataperfly, fixed_angles, fly_id, positions = load_fixed_tracks(trackfixed_path, poses_path, option='leap')
 
     boxes_idx = all_boxes_idx[all_boxes_idx % nflies == ifly]
     if nshow > boxes_idx.shape[0]:
@@ -865,9 +881,9 @@ def Jan_Script(vr, all_boxes_idx, ifly, trackfixed_path, pose_path, nshow: int =
         vplay(frames=boxes[ifly::nflies, ...], positions=positions[boxes_idx[:nshow], ...], moviemode=True)
 
 
-def reget_boxes(vr, boxes_idx, trackfixed_path, pose_path, option: str = 'leap', ifly: int = 0):
+def reget_boxes(vr, boxes_idx, trackfixed_path, poses_path, option: str = 'leap', ifly: int = 0):
 
-    nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, pose_path, option='leap')
+    nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, poses_path, option='leap')
 
     frames = np.floor_divide(boxes_idx, nflies)
     specific_fly_id = boxes_idx % nflies
@@ -1278,12 +1294,12 @@ def new_testing_priors(positions, error_matrix, boxes, cm, priors_path: str = '/
     return new_positions
 
 
-def priors_normal_test(vr, positions, trackfixed_path, pose_path, overwrite: bool = False, option: str = 'temp', network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5'):
+def priors_normal_test(vr, positions, trackfixed_path, poses_path, overwrite: bool = False, option: str = 'temp', network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5'):
     """ Runs the pipeline to test the prior application to the predictions on the training dataset, using the model specified by network_path.
         A temporary save file of the confidence maps and boxes will be saved after the first time in the temp_save_path to speed up repeated calls.
         Make sure to change temp_save_path or it will use my old temporary save from 24.12.2018 with leap network."""
 
-    nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, pose_path, option=option)
+    nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, poses_path, option=option)
 
     first_frames = 5000
 
@@ -1395,12 +1411,12 @@ def indexconvertion_frame2data(f, f_fly_id, dataperfly):
     return data_idx
 
 
-def looping_priors_normal(vr, original_positions, trackfixed_path, pose_path, overwrite: bool = False, option: str = 'temp', network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5', testing_priors_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save_priors.h5'):
+def looping_priors_normal(vr, original_positions, trackfixed_path, poses_path, overwrite: bool = False, option: str = 'temp', network_path: str = 'Z:/#Common/chainingmic/leap/best_model.h5', temp_save_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save.h5', testing_priors_path: str = 'Z:/#Common/adrian/Workspace/temp/leap/normal_temp_save_priors.h5'):
     """ Runs the pipeline to test the prior application to the predictions on the training dataset, using the model specified by network_path.
         A temporary save file of the confidence maps and boxes will be saved after the first time in the temp_save_path to speed up repeated calls.
         Make sure to change temp_save_path or it will use my old temporary save from 24.12.2018 with leap network."""
 
-    nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, pose_path, option=option)
+    nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, poses_path, option=option)
 
     first_frames = 5000
     epsilon = np.arange(-12, 13, 1).tolist()
@@ -1546,29 +1562,7 @@ def view_looping_priors_results(testing_priors_path: str = 'Z:/#Common/adrian/Wo
             plt.title('Proportion of Errors Pre-prior')
         plt.tight_layout()
 
-    # all-x, all-y, body, ..., wings, ..., legs, ...
-
-    # # Subgrouping data
-    # body = subgroup(eu_dist, [0, 1, 8, 11])
-    # wings = subgroup(eu_dist, [9, 10])
-    # legs = subgroup(eu_dist, [2, 3, 4, 5, 6, 7])
-    #
-    # # Plot
-    # plt.hist([eu_dist, body, wings, legs], bins=np.arange(-13, 13, 1), density=True, histtype='bar')
-    # plt.legend()
-
     pass
-
-
-def error_subgroup(X, parts, xory, epsilon):
-
-    subgrouped = np.empty([0])
-    for count, ipart in enumerate(parts):
-        for count3, eps in enumerate(epsilon):
-            for count2, ixory in enumerate(xory):
-                subgrouped = np.concatenate((subgrouped, X[ipart, xory, eps]), axis=0)
-
-    return subgrouped
 
 
 if __name__ == '__main__':
