@@ -22,6 +22,7 @@ from leap_utils.postprocessing import process_confmaps_simple
 from leap_utils.predict import predict_confmaps, load_network
 from scipy import stats
 from sklearn.metrics import confusion_matrix
+from leap_utils.postprocessing import max_simple
 
 np.seterr(divide='ignore', invalid='ignore')
 logging.basicConfig(level=logging.INFO)
@@ -79,14 +80,14 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     # if not os.path.exists(densities_path):
     #     os.mkdir(densities_path)
 
-    # Load Data from previously run analysis ######################################################################################
+    ######## Load Data from previously run analysis ###############################################################################
 
     # cwt_data = dd.io.load(cwt_path)
     # tsne_data = dd.io.load(tsne_path)
     # ws_data = dd.io.load(ws_path)
     # all_labels_data = dd.io.load(all_labels_path)
 
-    # Pipeline steps (on Video) ###################################################################################################
+    ######## Pipeline steps (on Video) ############################################################################################
 
     # cwt_data = cwt_pipeline(trackfixed_path, poses_path, cwt_path, option=option)
     # tsne_data = tsne_pipeline(cwt_data['cwt'], tsne_path, prandom=0.5, overwrite=True)
@@ -95,7 +96,7 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     # transitions_pipeline(all_labels_data)
     # confmat_data = confusion_mat(confmat_path, tsne_data, all_labels_data)
 
-    # Visualization functions   ###################################################################################################
+    ######## Visualization functions   ############################################################################################
 
     ## Watershed
     # tsne_data = dd.io.load(tsne_path)
@@ -113,16 +114,16 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     # sorted_clusters = clusters[np.argsort(-cluster_counts)]
     # get_multi_movie(vr, sorted_clusters[10], all_labels, poses_path, trackfixed_path, option=option)
 
-    # Network Model Tests (on Training Data)    ###################################################################################
+    ######## Network Model Tests (on Training Data)    ############################################################################
 
     # path_to_model_pred = f"{root}/chainingmic/deeplabcut/DeepCut_resnet50_flyposeNov26shuffle1_1030000-snapshot-1030000.h5"
     # error_distance(path_to_model_pred)
 
-    # Prior Tests (on Training Data)    ###########################################################################################
+    ######## Prior Tests (on Training Data)    ####################################################################################
 
     # priors_trainingset_test()
 
-    # Priot Tests (on Video)    ###################################################################################################
+    ######## Priot Tests (on Video)    ############################################################################################
 
     # if option == 'deeplabcut':
     #     positions = deepLabCut_positions(poses_path)
@@ -135,8 +136,39 @@ def main(option: str = 'leap', expID: str = 'localhost-20180720_182837'):
     # priors_normal_test(vr, positions, trackfixed_path, poses_path, option=option)
 
     ## Looping test
-    # looping_priors_normal(vr, positions, trackfixed_path, poses_path, option=option)
+    # looping_priors_normal(vr, positions, trackfixed_path, poses_path, option=option, overwrite=True)
     # view_looping_priors_results()
+
+    ######## Priot Tests (batch)    ###############################################################################################
+
+    # if option == 'deeplabcut':
+    #     positions = deepLabCut_positions(poses_path)
+    # else:
+    #     pose_data = dd.io.load(poses_path)
+    #     positions = pose_data['positions']
+    # vr = VideoReader(video_path)
+    #
+    # nflies, box_centers, dataperfly, fixed_angles, _, _ = load_fixed_tracks(trackfixed_path, poses_path, option=option)
+    #
+    # # Get boxes and cm
+    # boxes_idx = np.arange(7000, 7200)  # box indexing
+    # frame_idx, fly_ids = indexconvertion_box2frame(boxes_idx, nflies)   # frame indexing
+    # result_idx = fly_ids + np.arange(0, fly_ids.shape[0]*nflies, nflies)   # index to get specific box from export_boxes()
+    # frames_list = list(vr[frame_idx.tolist()])
+    # boxes, *_ = export_boxes(frames_list, box_centers[frame_idx, ...], box_size=np.array([120, 120]), box_angles=fixed_angles[frame_idx, ...])
+    # boxes = normalize_boxes(boxes[result_idx, ...])
+    # network = load_network(model_path='Z:/#Common/chainingmic/leap/best_model.h5', image_size=[120, 120])
+    # cm = predict_confmaps(network, boxes[:, :, :, :1])
+    #
+    # temp_batch_data = {'positions': positions[boxes_idx, ...], 'boxes': boxes, 'cm': cm}
+    # dd.io.save('Z:/#Common/adrian/Workspace/temp/leap/test_batch_priors.h5', temp_batch_data)
+
+    temp_batch_data = dd.io.load('Z:/#Common/adrian/Workspace/temp/leap/test_batch_priors.h5')
+    positions = temp_batch_data['positions']
+    boxes = temp_batch_data['boxes']
+    cm = temp_batch_data['cm']
+
+    prior_processing_pipeline(positions, boxes, cm)
 
     plt.show()
 
@@ -1561,6 +1593,110 @@ def view_looping_priors_results(testing_priors_path: str = 'Z:/#Common/adrian/Wo
         if ii == 0:
             plt.title('Proportion of Errors Pre-prior')
         plt.tight_layout()
+
+    pass
+
+
+def detect_prior_cases(positions, epsilon=0):
+
+    bp_thresholds = np.zeros((12, 2, 2))    # bodypart, x/y, min/max
+
+    # Original values before 29.12.2018:
+    # bp_thresholds[:, 1, 0] = [50, 40, 20, 10, 20, 50, 60, 50, 50, 10, 50, 50]
+    # bp_thresholds[:, 1, 1] = [80, 70, 70, 60, 70, 100, 110, 100, 80, 70, 110, 80]
+    # bp_thresholds[:, 0, 0] = [10, 25, 5, 25, 50, 5, 25, 50, 40, 60, 60, 60]
+    # bp_thresholds[:, 0, 1] = [60, 75, 60, 100, 100, 60, 100, 100, 90, 120, 120, 100]
+
+    # x min
+    bp_thresholds[:, 1, 0] = [50, 40, 20, 10, 20, 50, 60, 50, 50, 10, 50, 50]
+    # x max
+    bp_thresholds[:, 1, 1] = [80, 70, 70, 60, 70, 100, 110, 100, 80, 70, 110, 80]
+    # y min
+    bp_thresholds[:, 0, 0] = [10, 25, 5, 25, 50, 5, 25, 50, 40, 60, 60, 60]
+    # y max
+    bp_thresholds[:, 0, 1] = [60, 75, 60, 100, 100, 60, 100, 100, 90, 120, 120, 100]
+
+    error_matrix = np.zeros(positions.shape[0:2], dtype=bool)
+    for bp in range(12):
+        for jj in range(2):
+            cond1 = positions[:, bp, jj] > (bp_thresholds[bp, jj, 1] - epsilon)
+            cond2 = positions[:, bp, jj] < (bp_thresholds[bp, jj, 0] + epsilon)
+            error_matrix[:, bp] = np.any([error_matrix[:, bp], cond1, cond2], axis=0)
+
+    return error_matrix
+
+
+def priors_processing(input_pos, input_errors, input_boxes, input_cm, priors_path: str = '/#Common/adrian/Workspace/temp/priors.h5'):
+
+    # Get priors
+    priors_data = dd.io.load(priors_path)      # THIS SHOULD BE CHANGED, SO FUNCTION TAKES PRIORS DIRECTLY AND DOES NOT LOAD THEM EVERY TIME
+    priors = priors_data['priors']
+
+    # Coordinates of reference body parts (prior maxima) for prior shifting/aligning
+    ref_thorax, _ = max_simple(priors[:, :, 8:9])
+    ref_neck, _ = max_simple(priors[:, :, 1:2])
+    ref_tail, _ = max_simple(priors[:, :, 11:12])
+
+    # Initialize fixed positions
+    output_pos = np.copy(input_pos).astype(np.int)
+
+    # Loop through boxes with detected errors
+    for ii in range(input_pos.shape[0]):
+
+        # Use thorax, neck, tail or no reference, for alignment of the prior
+        if input_errors[ii, 8] == 0:
+            row_shift = int(ref_thorax[0, 1]-input_pos[ii, 8, 1])
+            col_shift = int(ref_thorax[0, 0]-input_pos[ii, 8, 0])
+        elif input_errors[ii, 1] == 0:
+            row_shift = int(ref_neck[0, 1]-input_pos[ii, 1, 1])
+            col_shift = int(ref_neck[0, 0]-input_pos[ii, 1, 0])
+        elif input_errors[ii, 11] == 0:
+            row_shift = int(ref_tail[0, 1]-input_pos[ii, 11, 1])
+            col_shift = int(ref_tail[0, 0]-input_pos[ii, 11, 0])
+        else:
+            row_shift = 0
+            col_shift = 0
+
+        # Select only body parts with detected errors
+        bp_to_prior = np.where(input_errors[ii, :])[0]
+
+        # Get peaks from confidence map
+        maxima = max2d_multi(input_cm[ii, :, :, bp_to_prior], num_peaks=5)
+        maxima_val = input_cm[ii, maxima[:, 0, :], maxima[:, 1, :], bp_to_prior]
+
+        # Loop through each body part with detected error
+        for jj, bp in enumerate(bp_to_prior):
+            col_in_prior = np.clip(maxima[:, 0, jj] - col_shift, 0, 119)
+            row_in_prior = np.clip(maxima[:, 1, jj] - row_shift, 0, 119)
+            bayes_score = np.multiply(maxima_val[:, jj], priors[col_in_prior, row_in_prior, bp])
+            output_pos[ii, bp, :] = maxima[np.argmax(bayes_score), :, jj]
+
+    return output_pos
+
+
+def prior_processing_pipeline(positions, boxes, cm):
+
+    old_positions = np.copy(positions).astype(np.int)
+    error_matrix = detect_prior_cases(positions)
+    idxs = np.where(np.any(error_matrix, axis=1))[0]
+    print('number of errors to process: ', idxs.shape[0])
+    positions[idxs, ...] = priors_processing(positions[idxs, ...], error_matrix[idxs, ...], boxes[idxs, ...], cm[idxs, ...])
+
+    new_error_matrix = detect_prior_cases(positions)
+    new_idxs = np.where(np.any(new_error_matrix, axis=1))[0]
+
+    for ii in idxs[::int(idxs.shape[0]/5+1)]:
+        plt.figure()
+        plt.title(ii)
+        plt.imshow(boxes[ii, :, :, 0], aspect='auto', cmap='gray')
+        plt.scatter(old_positions[ii, :, 1], old_positions[ii, :, 0], s=30, marker='s', c='red')
+        plt.scatter(positions[ii, :, 1], positions[ii, :, 0], s=10, c='blue')
+        plt.legend(['old', 'new'])
+        if np.isin(ii, new_idxs):
+            print('not fixed yet')
+        plt.show()
+
+    print(new_idxs.shape[0], ' errors unfixed.')
 
     pass
 
