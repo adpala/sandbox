@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2020-09-25T13:10:17.556Z" agent="5.0 (Windows)" etag="2SWNSyzzW_NNkLWM_9CO" version="13.7.4" type="github" pages="7">
+<mxfile host="app.diagrams.net" modified="2020-09-25T13:25:30.937Z" agent="5.0 (Windows)" etag="SPnvIhE0DXK0B31L1WNq" version="13.7.4" type="github" pages="7">
   <diagram id="HAEKMg4tziKl4eJ4Gmnb" name="Kohl et al 2015">
     <mxGraphModel dx="1422" dy="883" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
@@ -484,7 +484,7 @@
     </mxGraphModel>
   </diagram>
   <diagram id="T6PZ9HIPMElVFkE6ezBq" name="compilation">
-    <mxGraphModel dx="2035" dy="736" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" background="#F4F1DE" math="0" shadow="0">
+    <mxGraphModel dx="2272" dy="883" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" background="#F4F1DE" math="0" shadow="0">
       <root>
         <mxCell id="Jtx8h55Avjej_FqfzKcw-0" />
         <mxCell id="Jtx8h55Avjej_FqfzKcw-1" parent="Jtx8h55Avjej_FqfzKcw-0" />
@@ -607,12 +607,9 @@
         <mxCell id="NxzG49px9wZzz-ciOl3U-1" value="&lt;div style=&quot;font-size: 10px&quot;&gt;IR52a&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;align=center;fillColor=#F2CC8F;strokeColor=#E07A5F;fontColor=#393C56;fontSize=10;fontFamily=Verdana;" vertex="1" parent="Jtx8h55Avjej_FqfzKcw-1">
           <mxGeometry x="-140" y="490" width="80" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="NxzG49px9wZzz-ciOl3U-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;endArrow=classic;endFill=1;endSize=12;labelBackgroundColor=#F4F1DE;strokeColor=#E07A5F;fontColor=#393C56;fontSize=10;fontFamily=Verdana;" edge="1" parent="Jtx8h55Avjej_FqfzKcw-1" target="NxzG49px9wZzz-ciOl3U-1">
+        <mxCell id="NxzG49px9wZzz-ciOl3U-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;endArrow=classic;endFill=1;endSize=12;labelBackgroundColor=#F4F1DE;strokeColor=#E07A5F;fontColor=#393C56;fontSize=10;fontFamily=Verdana;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="Jtx8h55Avjej_FqfzKcw-1" source="NxzG49px9wZzz-ciOl3U-8" target="NxzG49px9wZzz-ciOl3U-1">
           <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="-100" y="610" />
-              <mxPoint x="-100" y="610" />
-            </Array>
+            <Array as="points" />
             <mxPoint x="-100" y="640" as="sourcePoint" />
             <mxPoint x="-149" y="140" as="targetPoint" />
           </mxGeometry>
@@ -626,6 +623,12 @@
             <mxPoint x="-100" y="490" as="sourcePoint" />
             <mxPoint x="-100" y="420" as="targetPoint" />
           </mxGeometry>
+        </mxCell>
+        <mxCell id="NxzG49px9wZzz-ciOl3U-7" value="&lt;font color=&quot;#000000&quot;&gt;Lenschow et al 2020&lt;/font&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;rotation=90;" vertex="1" parent="Jtx8h55Avjej_FqfzKcw-1">
+          <mxGeometry x="-110" y="580" width="130" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="NxzG49px9wZzz-ciOl3U-8" value="&lt;div style=&quot;font-size: 10px&quot;&gt;&quot;sex pheromones&quot;&lt;br&gt;&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#F2CC8F;strokeColor=#E07A5F;fontColor=#393C56;fontSize=10;fontFamily=Verdana;" vertex="1" parent="Jtx8h55Avjej_FqfzKcw-1">
+          <mxGeometry x="-140" y="640" width="80" height="80" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
